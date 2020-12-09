@@ -29,12 +29,7 @@ func myServer(sig chan os.Signal) error {
 		}
 	}()
 
-	err := s.ListenAndServe()
-	if err != nil {
-		fmt.Println(err)
-		sig <- syscall.SIGTERM
-	}
-	return err
+	return s.ListenAndServe()
 }
 
 
@@ -45,7 +40,12 @@ func main() {
 
 	var g errgroup.Group
 	g.Go(func() error {
-		return myServer(sig)
+		err := myServer(sig)
+		if err != nil {
+			fmt.Println(err)
+			sig <- syscall.SIGTERM
+		}
+		return err
 	})
 
 	if err := g.Wait(); err != nil {
