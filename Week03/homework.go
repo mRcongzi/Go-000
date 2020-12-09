@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-func myServer(done chan int) error{
+func myServer(sig chan os.Signal) error {
 	h := http.NewServeMux()
 	h.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(rw, "Hello, bro. Welcome to my server!")
@@ -23,41 +23,33 @@ func myServer(done chan int) error{
 
 	go func() {
 		select {
-		case <-done:
+		case <-sig:
 			s.Shutdown(context.Background())
 			fmt.Println("http server shutdown completed！")
 		}
 	}()
 
-	return s.ListenAndServe()
+	err := s.ListenAndServe()
+	if err != nil {
+		fmt.Println(err)
+		sig <- syscall.SIGTERM
+	}
+	return err
 }
 
 
 func main() {
 	sig := make(chan os.Signal, 1)
-	done := make(chan int, 1)
-
-	var g errgroup.Group
-	g.Go(func() error {
-		return myServer(done)
-	})
-
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	fmt.Println("waiting for signal")
 
-	g.Go(func() error{
-		s := <- sig
-		fmt.Printf("accept signal: %s\n", s)
-		done <- 0
-		return nil
+	var g errgroup.Group
+	g.Go(func() error {
+		return myServer(sig)
 	})
 
 	if err := g.Wait(); err != nil {
-		done <- 0
-		sig <- syscall.SIGTERM
+		fmt.Println("system exiting!")
 	}
 
-	<-done
-	fmt.Println("system exiting!")
-	//time.Sleep(time.Millisecond)
 }
