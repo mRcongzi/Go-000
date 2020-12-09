@@ -9,24 +9,27 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
-func myServer(ctx context.Context) error {
+func myServer(ctx context.Context, addr string) error {
 	h := http.NewServeMux()
 	h.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {
-		fmt.Fprintf(rw, "Hello, bro. Welcome to my server!")
+		fmt.Fprintf(rw, "Hello, bro. Welcome to my server[%s]!", addr)
 	})
 
 	s := http.Server{
-		Addr: ":8800",
+		Addr: addr,
 		Handler: h,
 	}
 
 	go func() {
 		select {
 		case <-ctx.Done():
-			s.Shutdown(context.Background())
-			fmt.Println("http server shutdown completed！")
+			if err := s.Shutdown(context.Background()); err != nil {
+				ctx.Done()
+			}
+			fmt.Println("shutdown http server complete!")
 		}
 	}()
 
@@ -37,6 +40,7 @@ func mySignal(ctx context.Context, sig chan os.Signal) error{
 	select{
 	case <-sig:
 		ctx.Done()
+		time.Sleep(time.Nanosecond)		// 等待shutdown完成的打印
 		return errors.New("signal exiting! ")
 	case <- ctx.Done():
 		sig <- syscall.SIGTERM
@@ -52,7 +56,7 @@ func main() {
 
 	g, cancel := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		err := myServer(cancel)
+		err := myServer(cancel, ":8800")
 		if err != nil {
 			cancel.Done()
 		}
